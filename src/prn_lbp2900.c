@@ -269,13 +269,19 @@ static void lbp2900_job_prologue(struct printer_state_s *state)
 static void lbp3000_job_prologue(struct printer_state_s *state)
 {
 	(void) state;
+	uint8_t buf[8] = {0};
+	size_t size = sizeof(buf);
+
 	capt_sendrecv_retry(CAPT_IDENT, NULL, 0, NULL, 0, 3);
 	sleep(1);
 	capt_init_status();
 	lbp2900_get_status(state->ops);
 
 	capt_sendrecv_retry(CAPT_START_0, NULL, 0, NULL, 0, 3);
-	capt_sendrecv_retry(CAPT_JOB_BEGIN, magicbuf_0, ARRAY_SIZE(magicbuf_0), NULL, 0, 3);
+	if (capt_sendrecv_retry(CAPT_JOB_BEGIN, magicbuf_0, ARRAY_SIZE(magicbuf_0),
+			buf, &size, 3)) {
+		job = WORD(buf[2], buf[3]);
+	}
 	/* LBP-3000 prints the very first printjob perfectly
 	 * and then proceeds to hang at this (commented out)
 	 * spot. That's the difference, or so it seems. */
@@ -528,7 +534,7 @@ static void lbp2900_job_epilogue(struct printer_state_s *state)
 	send_job_start(state, 6, state->last_fired_page);
 	lbp2900_wait_ready(state->ops);
 
-	capt_sendrecv_retry(CAPT_JOB_END, jbuf, 2, NULL, 0, 3);
+	capt_send(CAPT_JOB_END, jbuf, 2);
 }
 
 static void lbp2900_page_setup(struct printer_state_s *state,
@@ -684,7 +690,7 @@ static void lbp2900_cancel_job(struct printer_state_s *state)
 	capt_sendrecv_retry(CAPT_START_2, NULL, 0, NULL, 0, 3);
 	lbp2900_wait_ready(state->ops);
 
-	capt_sendrecv_retry(CAPT_JOB_END, jbuf, 2, NULL, 0, 3);
+	capt_send(CAPT_JOB_END, jbuf, 2);
 }
 
 static struct lbp2900_ops_s lbp2900_ops = {
