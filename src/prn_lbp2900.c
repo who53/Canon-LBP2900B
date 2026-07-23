@@ -448,7 +448,9 @@ static bool lbp2900_page_epilogue(struct printer_state_s *state, const struct pa
 	while (1) {
 	  usleep(100000);
 	  status = lbp2900_get_status(state->ops);
-	  if (status->page_received == status->page_decoding)
+	  if (status->page_received != (uint16_t)-1 &&
+	      status->page_received >= state->ipage &&
+	      status->page_decoding >= state->ipage)
 	    break;
 	}
 
@@ -462,7 +464,7 @@ static bool lbp2900_page_epilogue(struct printer_state_s *state, const struct pa
 	while (1) {
 		const struct capt_status_s *status = lbp2900_get_status(state->ops);
 		/* Interesting. Using page_printing here results in shifted print */
-		if (status->page_out == status->page_decoding)
+		if (status->page_out >= state->ipage)
 			return true;
 		/* Paper jam / cover open: s2 bit 14 (0x4000) + s4 bit 7 (0x0080)
 		 * Seen in USB captures: s2 toggles 0100→4100 with s4 toggling 0→0080 */
@@ -488,9 +490,9 @@ static void lbp2900_job_epilogue(struct printer_state_s *state)
 	uint8_t jbuf[2] = { LO(job), HI(job) };
 
 	/* Wait for all pages to finish printing.
-	 * Prefer the requested total pages when available; fall back to decoding count.
+	 * Prefer the sent page count (state->ipage) when available; fall back to decoding count.
 	 */
-	if (state->options.total_pages > 0) {
+	if (state->ipage > 0) {
 		while (1) {
 			const struct capt_status_s *status = lbp2900_get_status(state->ops);
 			if (FLAG(status, CAPT_FL_NOPAPER1) || FLAG(status, CAPT_FL_NOPAPER2)
@@ -500,7 +502,7 @@ static void lbp2900_job_epilogue(struct printer_state_s *state)
 				lbp2900_wait_user(state);
 				continue;
 			}
-			if (status->page_completed >= state->options.total_pages)
+			if (status->page_completed >= state->ipage)
 				break;
 			usleep(100000);
 		}
